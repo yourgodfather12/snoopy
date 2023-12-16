@@ -1,6 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 from colorama import Fore, Style
+import nmap
 
 failed_tests = []
 
@@ -110,17 +111,33 @@ def print_failed_tests():
         print(Style.RESET_ALL)
 
 
+def run_nmap_scan(url):
+    try:
+        nm = nmap.PortScanner()
+        nm.scan(url, arguments='-Pn')  # '-Pn' flag disables host discovery
+        for host in nm.all_hosts():
+            print(f"{Fore.GREEN}Nmap Scan Results for {host}:")
+            print(nm[host].csv())
+    except Exception as e:
+        print(f"{Fore.RED}Error running Nmap scan: {e}")
+        failed_tests.append("Nmap Scan")
+    finally:
+        print(Style.RESET_ALL)
+
+
 def main():
-    website_url = input("Enter the URL to scan: ")
+    url = input("Enter the URL to scan: ")
 
-    if not website_url.startswith(("http://", "https://")):
-        website_url = "https://" + website_url
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
 
-    check_information_disclosure(website_url)
-    check_sql_injection(website_url)
-    check_xss_vulnerability(website_url)
-    check_url_redirection(website_url)
-    check_insecure_direct_object_references(website_url)
+    check_information_disclosure(url)
+    check_sql_injection(url)
+    check_xss_vulnerability(url)
+    check_url_redirection(url)
+    check_insecure_direct_object_references(url)
+
+    run_nmap_scan(url)  # Include Nmap scan here
 
     print_failed_tests()
 
