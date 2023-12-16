@@ -2,11 +2,8 @@ import requests
 from bs4 import BeautifulSoup
 from colorama import Fore, Style
 
-# Storing failed tests
 failed_tests = []
 
-
-# Function to check for basic information disclosure vulnerability
 def check_information_disclosure(url):
     try:
         response = requests.get(url)
@@ -21,12 +18,10 @@ def check_information_disclosure(url):
         print(f"{Fore.RED}Invalid URL. Please include the scheme (http:// or https://) in the URL.")
         failed_tests.append("Information Disclosure Check")
     finally:
-        print(Style.RESET_ALL)  # Reset color after printing
+        print(Style.RESET_ALL)
 
-
-# Function to check for SQL injection vulnerability (more advanced)
 def check_sql_injection(url):
-    test_payloads = ["' OR '1'='1", "1'; DROP TABLE users; --"]  # More complex payloads
+    test_payloads = ["' OR '1'='1", "1'; DROP TABLE users; --", "' UNION SELECT '1", "1' OR SLEEP(5)"]  # Expanded payloads
     vulnerable = False
     try:
         for payload in test_payloads:
@@ -43,32 +38,24 @@ def check_sql_injection(url):
         print(f"{Fore.YELLOW}SQL Injection Check failed with error: {e}")
         failed_tests.append("SQL Injection Check")
     finally:
-        print(Style.RESET_ALL)  # Reset color after printing
+        print(Style.RESET_ALL)
 
-
-# Function to check for Insecure Direct Object References (IDOR)
 def check_insecure_direct_object_references(url):
     try:
-        # Modify this logic according to the site's structure to check for IDOR
-        # For instance, if there are sequential IDs used in URLs to access sensitive data
-        # Example: https://example.com/data/1, https://example.com/data/2, ...
         response_1 = requests.get(url + "/data/1")
         response_2 = requests.get(url + "/data/2")
 
         if response_1.status_code == 200 and response_2.status_code == 200:
-            # Both requests succeeded which might indicate an IDOR vulnerability
+            print(f"{Fore.GREEN}Insecure Direct Object References Check - No potential IDOR detected")
+        else:
             print(f"{Fore.RED}Insecure Direct Object References Check - Potential IDOR detected")
             failed_tests.append("Insecure Direct Object References Check")
-        else:
-            print(f"{Fore.GREEN}Insecure Direct Object References Check - No potential IDOR detected")
     except requests.RequestException as e:
         print(f"{Fore.YELLOW}Insecure Direct Object References Check failed with error: {e}")
         failed_tests.append("Insecure Direct Object References Check")
     finally:
-        print(Style.RESET_ALL)  # Reset color after printing
+        print(Style.RESET_ALL)
 
-
-# Function to check for Cross-Site Scripting (XSS) vulnerability
 def check_xss_vulnerability(url):
     try:
         response = requests.get(url)
@@ -87,10 +74,8 @@ def check_xss_vulnerability(url):
         print(f"{Fore.YELLOW}XSS Vulnerability Check failed with error: {e}")
         failed_tests.append("XSS Vulnerability Check")
     finally:
-        print(Style.RESET_ALL)  # Reset color after printing
+        print(Style.RESET_ALL)
 
-
-# Function to check for URL redirection vulnerability
 def check_url_redirection(url):
     try:
         response = requests.get(url, allow_redirects=False)
@@ -108,25 +93,28 @@ def check_url_redirection(url):
         print(f"{Fore.YELLOW}URL Redirection Check failed with error: {e}")
         failed_tests.append("URL Redirection Check")
     finally:
-        print(Style.RESET_ALL)  # Reset color after printing
+        print(Style.RESET_ALL)
 
-
-if __name__ == "__main__":
-    website_url = input("Enter the URL to scan: ")
-
-    # Adding a check for the URL scheme (http/https)
-    if not website_url.startswith(("http://", "https://")):
-        website_url = "https://" + website_url  # Assuming HTTPS by default if scheme is missing
-
-    # Performing vulnerability checks with colors
-    check_information_disclosure(website_url)
-    check_sql_injection(website_url)
-    check_xss_vulnerability(website_url)
-    check_url_redirection(website_url)
-
-    # Printing failed tests at the end with bigger and bold text
+def print_failed_tests():
     if failed_tests:
         print(f"\n{Style.BRIGHT}{Fore.RED}Failed Tests:")
         for test in failed_tests:
             print(f"- {test}")
         print(Style.RESET_ALL)
+
+def main():
+    website_url = input("Enter the URL to scan: ")
+
+    if not website_url.startswith(("http://", "https://")):
+        website_url = "https://" + website_url
+
+    check_information_disclosure(website_url)
+    check_sql_injection(website_url)
+    check_xss_vulnerability(website_url)
+    check_url_redirection(website_url)
+    check_insecure_direct_object_references(website_url)
+
+    print_failed_tests()
+
+if __name__ == "__main__":
+    main()
