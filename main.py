@@ -4,6 +4,7 @@ from colorama import Fore, Style
 
 failed_tests = []
 
+
 def check_information_disclosure(url):
     try:
         response = requests.get(url)
@@ -20,8 +21,10 @@ def check_information_disclosure(url):
     finally:
         print(Style.RESET_ALL)
 
+
 def check_sql_injection(url):
-    test_payloads = ["' OR '1'='1", "1'; DROP TABLE users; --", "' UNION SELECT '1", "1' OR SLEEP(5)"]  # Expanded payloads
+    test_payloads = ["' OR '1'='1", "1'; DROP TABLE users; --", "' UNION SELECT '1",
+                     "1' OR SLEEP(5)"]  # Expanded payloads
     vulnerable = False
     try:
         for payload in test_payloads:
@@ -40,6 +43,7 @@ def check_sql_injection(url):
     finally:
         print(Style.RESET_ALL)
 
+
 def check_insecure_direct_object_references(url):
     try:
         response_1 = requests.get(url + "/data/1")
@@ -55,6 +59,7 @@ def check_insecure_direct_object_references(url):
         failed_tests.append("Insecure Direct Object References Check")
     finally:
         print(Style.RESET_ALL)
+
 
 def check_xss_vulnerability(url):
     try:
@@ -76,6 +81,7 @@ def check_xss_vulnerability(url):
     finally:
         print(Style.RESET_ALL)
 
+
 def check_url_redirection(url):
     try:
         response = requests.get(url, allow_redirects=False)
@@ -95,12 +101,14 @@ def check_url_redirection(url):
     finally:
         print(Style.RESET_ALL)
 
+
 def print_failed_tests():
     if failed_tests:
         print(f"\n{Style.BRIGHT}{Fore.RED}Failed Tests:")
         for test in failed_tests:
             print(f"- {test}")
         print(Style.RESET_ALL)
+
 
 def main():
     website_url = input("Enter the URL to scan: ")
@@ -115,6 +123,7 @@ def main():
     check_insecure_direct_object_references(website_url)
 
     print_failed_tests()
+
 
 if __name__ == "__main__":
     main()
