@@ -1,87 +1,64 @@
 import requests
 from bs4 import BeautifulSoup
-from colorama import Fore, Style
-import nmap
+import logging
+import re
 
-failed_tests = []
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
+class SecurityCheckFailed(Exception):
+    pass
+
+def perform_security_check(test_name, check_function):
+    try:
+        result = check_function()
+        if result:
+            logger.info(f"{test_name} - Failed: {result}")
+            raise SecurityCheckFailed(f"{test_name} failed: {result}")
+        else:
+            logger.info(f"{test_name} - Passed")
+    except SecurityCheckFailed as e:
+        raise e
+    except Exception as e:
+        logger.warning(f"{test_name} - Check failed with error: {e}")
+        raise SecurityCheckFailed(f"{test_name} check failed: {e}")
 
 def check_information_disclosure(url):
     try:
-        response = requests.get(url)
-        if response.ok:
-            print(f"{Fore.GREEN}Information Disclosure Check - Status Code: {response.status_code}")
-            print("Response Body:")
-            print(response.text)
-        else:
-            print(f"{Fore.RED}Information Disclosure Check - Status Code: {response.status_code}")
-            failed_tests.append("Information Disclosure Check")
-    except requests.exceptions.MissingSchema:
-        print(f"{Fore.RED}Invalid URL. Please include the scheme (http:// or https://) in the URL.")
-        failed_tests.append("Information Disclosure Check")
-    finally:
-        print(Style.RESET_ALL)
-
+        response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
+        response.raise_for_status()
+        # Look for specific keywords indicating sensitive information
+        sensitive_keywords = ['password', 'username', 'private_key']
+        for keyword in sensitive_keywords:
+            if keyword in response.text.lower():
+                return f"Suspected information disclosure: '{keyword}' found in response"
+        return None
+    except requests.RequestException as e:
+        raise SecurityCheckFailed(f"Failed to fetch response: {e}")
 
 def check_sql_injection(url):
-    test_payloads = ["' OR '1'='1", "1'; DROP TABLE users; --", "' UNION SELECT '1",
-                     "1' OR SLEEP(5)"]  # Expanded payloads
-    vulnerable = False
     try:
-        for payload in test_payloads:
-            inject_url = f"{url}/search?id={payload}"
-            response = requests.get(inject_url)
-            if "error" in response.text:
-                print(f"{Fore.RED}SQL Injection Check - Vulnerable to payload: {payload}")
-                vulnerable = True
-                failed_tests.append("SQL Injection Check")
-                break
-        if not vulnerable:
-            print(f"{Fore.GREEN}SQL Injection Check - Not Vulnerable")
+        # Injecting SQL payload to check for vulnerability
+        test_payload = "1' OR '1'='1"
+        inject_url = f"{url}/search?id={test_payload}"
+        response = requests.get(inject_url)
+        if "error" in response.text:
+            return "Vulnerable to SQL Injection"
+        return None
     except requests.RequestException as e:
-        print(f"{Fore.YELLOW}SQL Injection Check failed with error: {e}")
-        failed_tests.append("SQL Injection Check")
-    finally:
-        print(Style.RESET_ALL)
-
-
-def check_insecure_direct_object_references(url):
-    try:
-        response_1 = requests.get(url + "/data/1")
-        response_2 = requests.get(url + "/data/2")
-
-        if response_1.status_code == 200 and response_2.status_code == 200:
-            print(f"{Fore.GREEN}Insecure Direct Object References Check - No potential IDOR detected")
-        else:
-            print(f"{Fore.RED}Insecure Direct Object References Check - Potential IDOR detected")
-            failed_tests.append("Insecure Direct Object References Check")
-    except requests.RequestException as e:
-        print(f"{Fore.YELLOW}Insecure Direct Object References Check failed with error: {e}")
-        failed_tests.append("Insecure Direct Object References Check")
-    finally:
-        print(Style.RESET_ALL)
-
+        raise SecurityCheckFailed(f"Failed SQL Injection test: {e}")
 
 def check_xss_vulnerability(url):
     try:
         response = requests.get(url)
-        if response.ok:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            script_tags = soup.find_all('script')
-            if script_tags:
-                print(f"{Fore.RED}XSS Vulnerability Check - Detected {len(script_tags)} <script> tags")
-                failed_tests.append("XSS Vulnerability Check")
-            else:
-                print(f"{Fore.GREEN}XSS Vulnerability Check - No <script> tags detected")
-        else:
-            print(f"{Fore.RED}XSS Vulnerability Check - Status Code: {response.status_code}")
-            failed_tests.append("XSS Vulnerability Check")
+        soup = BeautifulSoup(response.text, 'html.parser')
+        # Checking for script tags in the HTML content
+        script_tags = soup.find_all('script')
+        if script_tags:
+            return f"Detected {len(script_tags)} <script> tags. Possible XSS Vulnerability."
+        return None
     except requests.RequestException as e:
-        print(f"{Fore.YELLOW}XSS Vulnerability Check failed with error: {e}")
-        failed_tests.append("XSS Vulnerability Check")
-    finally:
-        print(Style.RESET_ALL)
-
+        raise SecurityCheckFailed(f"Failed XSS Vulnerability test: {e}")
 
 def check_url_redirection(url):
     try:
@@ -89,58 +66,52 @@ def check_url_redirection(url):
         if response.status_code in [301, 302]:
             location = response.headers.get('Location')
             if location:
-                print(f"{Fore.RED}URL Redirection Check - Detected redirection to: {location}")
-                failed_tests.append("URL Redirection Check")
-            else:
-                print(f"{Fore.RED}URL Redirection Check - Detected redirection but no 'Location' header")
-                failed_tests.append("URL Redirection Check")
-        else:
-            print(f"{Fore.GREEN}URL Redirection Check - No redirection detected")
+                return f"Detected redirection to: {location}"
+            return "Detected redirection but no 'Location' header"
+        return None
     except requests.RequestException as e:
-        print(f"{Fore.YELLOW}URL Redirection Check failed with error: {e}")
-        failed_tests.append("URL Redirection Check")
-    finally:
-        print(Style.RESET_ALL)
+        raise SecurityCheckFailed(f"Failed URL Redirection test: {e}")
 
+def check_insecure_direct_object_references(url):
+    try:
+        # Check if endpoints provide unauthorized access to sensitive data
+        response_1 = requests.get(url + "/data/1")
+        response_2 = requests.get(url + "/data/2")
+        if response_1.status_code != 200 or response_2.status_code != 200:
+            return "Potential Insecure Direct Object References detected"
+        return None
+    except requests.RequestException as e:
+        raise SecurityCheckFailed(f"Failed Insecure Direct Object References test: {e}")
 
-def print_failed_tests():
+def print_failed_tests(failed_tests):
     if failed_tests:
-        print(f"\n{Style.BRIGHT}{Fore.RED}Failed Tests:")
+        print("\nFailed Tests:")
         for test in failed_tests:
             print(f"- {test}")
-        print(Style.RESET_ALL)
-
-
-def run_nmap_scan(url):
-    try:
-        nm = nmap.PortScanner()
-        nm.scan(url, arguments='-Pn')  # '-Pn' flag disables host discovery
-        for host in nm.all_hosts():
-            print(f"{Fore.GREEN}Nmap Scan Results for {host}:")
-            print(nm[host].csv())
-    except Exception as e:
-        print(f"{Fore.RED}Error running Nmap scan: {e}")
-        failed_tests.append("Nmap Scan")
-    finally:
-        print(Style.RESET_ALL)
-
 
 def main():
-    url = input("Enter the URL to scan: ")
+    url = input("Enter the URL to scan: ").strip()
 
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
 
-    check_information_disclosure(url)
-    check_sql_injection(url)
-    check_xss_vulnerability(url)
-    check_url_redirection(url)
-    check_insecure_direct_object_references(url)
+    tests = [
+        ("Information Disclosure Check", lambda: check_information_disclosure(url)),
+        ("SQL Injection Check", lambda: check_sql_injection(url)),
+        ("XSS Vulnerability Check", lambda: check_xss_vulnerability(url)),
+        ("URL Redirection Check", lambda: check_url_redirection(url)),
+        ("Insecure Direct Object References Check", lambda: check_insecure_direct_object_references(url))
+    ]
 
-    run_nmap_scan(url)  # Include Nmap scan here
+    failed_tests = []
 
-    print_failed_tests()
+    for test_name, check_function in tests:
+        try:
+            perform_security_check(test_name, check_function)
+        except SecurityCheckFailed as e:
+            failed_tests.append(str(e))
 
+    print_failed_tests(failed_tests)
 
 if __name__ == "__main__":
     main()
