@@ -11,4 +11,4 @@ This tool is used to scan the URL given for various vulnerabilities listed below
 - Error Handling Check: Analyzes how error handling is managed by the server, particularly when encountering a 404 (Not Found) error.
 
 To run this tool use the command 
-"python3 main.py" and the enter the URL you want to scan. you do not have to put "https" or "http". URL's such as "fuckoff.com" will suffice  
+"python3 main.py" and then enter the URL you want to scan. you do not have to put "https" or "http". URL's such as "fuckoff.com" will suffice  
