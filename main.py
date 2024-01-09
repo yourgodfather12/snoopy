@@ -104,9 +104,14 @@ def check_sensitive_data_exposure(url):
 
 def check_authentication_bypass(url):
     try:
-        return "Authentication Bypass vulnerability not checked"
+        response = requests.get(url)
+        # Implement a simple check here - for example, checking if the response status is 200 (OK)
+        if response.status_code == 200:
+            return "Authentication Bypass vulnerability detected: Access granted without proper authentication."
+        return None  # No vulnerability detected
     except requests.RequestException as e:
         raise SecurityCheckFailed(f"Failed authentication bypass check: {e}")
+
 
 
 def check_security_headers(url):
