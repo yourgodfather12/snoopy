@@ -1,175 +1,124 @@
-import requests
-from bs4 import BeautifulSoup
 import logging
-import re
+import time
+import requests
+
+from scans import (
+    check_information_disclosure,
+    check_sql_injection,
+    check_xss_vulnerability,
+    check_url_redirection,
+    check_insecure_direct_object_references,
+    check_sensitive_data_exposure,
+    check_authentication_bypass,
+    check_security_headers,
+    check_error_handling,
+    check_cross_origin_resource_sharing,
+    check_directory_listing,
+    check_http_methods,
+    check_tls_configuration,
+    check_jwt_security,
+    check_server_information,
+    check_clickjacking_vulnerability,
+    check_cookie_security,
+    check_cors_policy,
+    check_server_side_template_injection
+)
+
+from utils import print_failed_tests
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 class SecurityCheckFailed(Exception):
-    pass
+    def __init__(self, test_name, details):
+        super().__init__(f"{test_name} failed: {details}")
+        self.test_name = test_name
+        self.details = details
 
 
-def perform_security_check(test_name, check_function):
+def perform_security_check(test_name, check_function, url, session):
     try:
-        result = check_function()
+        result = check_function(url, session)
         if result:
             logger.info(f"{test_name} - Failed: {result}")
-            raise SecurityCheckFailed(f"{test_name} failed: {result}")
+            raise SecurityCheckFailed(test_name, details=result)
         else:
             logger.info(f"{test_name} - Passed")
     except SecurityCheckFailed as e:
         raise e
     except Exception as e:
         logger.warning(f"{test_name} - Check failed with error: {e}")
-        raise SecurityCheckFailed(f"{test_name} check failed: {e}")
+        raise SecurityCheckFailed(test_name, details=str(e))
 
 
-def check_information_disclosure(url):
-    try:
-        response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
-        response.raise_for_status()
+def get_validated_url():
+    while True:
+        url = input("Enter the URL to scan: ").strip()
 
-        sensitive_patterns = ['password', 'username', 'private_key']
-        for pattern in sensitive_patterns:
-            if pattern in response.text.lower():
-                return f"Suspected information disclosure: '{pattern}' found in response"
+        if url.startswith(("http://", "https://")):
+            break
+        else:
+            print("Invalid URL format. Please include 'http://' or 'https://'.")
 
-        return None
-    except requests.RequestException as e:
-        raise SecurityCheckFailed(f"Failed to fetch response: {e}")
+    return url
 
 
-def check_sql_injection(url):
-    try:
-        test_payload = "1' OR '1'='1"
-        inject_url = f"{url}/search?id={test_payload}"
-        response = requests.get(inject_url)
-        if "error" in response.text:
-            return "Vulnerable to SQL Injection"
-        return None
-    except requests.RequestException as e:
-        raise SecurityCheckFailed(f"Failed SQL Injection test: {e}")
-
-
-def check_xss_vulnerability(url):
-    try:
-        response = requests.get(url)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        script_tags = soup.find_all('script')
-        if script_tags:
-            return f"Detected {len(script_tags)} <script> tags. Possible XSS Vulnerability."
-        return None
-    except requests.RequestException as e:
-        raise SecurityCheckFailed(f"Failed XSS Vulnerability test: {e}")
-
-
-def check_url_redirection(url):
-    try:
-        response = requests.get(url, allow_redirects=False)
-        if response.status_code in [301, 302]:
-            location = response.headers.get('Location')
-            if location:
-                return f"Detected redirection to: {location}"
-            return "Detected redirection but no 'Location' header"
-        return None
-    except requests.RequestException as e:
-        raise SecurityCheckFailed(f"Failed URL Redirection test: {e}")
-
-
-def check_insecure_direct_object_references(url):
-    try:
-        response_1 = requests.get(url + "/data/1")
-        response_2 = requests.get(url + "/data/2")
-        if response_1.status_code != 200 or response_2.status_code != 200:
-            return "Potential Insecure Direct Object References detected"
-        return None
-    except requests.RequestException as e:
-        raise SecurityCheckFailed(f"Failed Insecure Direct Object References test: {e}")
-
-
-def check_sensitive_data_exposure(url):
-    try:
-        response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
-        response.raise_for_status()
-        sensitive_patterns = ['credit card', 'ssn', 'api_key']
-        for pattern in sensitive_patterns:
-            if re.search(pattern, response.text, re.IGNORECASE):
-                return f"Suspected sensitive data exposure: '{pattern}' found in response"
-        return None
-    except requests.RequestException as e:
-        raise SecurityCheckFailed(f"Failed sensitive data exposure check: {e}")
-
-
-def check_authentication_bypass(url):
-    try:
-        response = requests.get(url)
-        # Implement a simple check here - for example, checking if the response status is 200 (OK)
-        if response.status_code == 200:
-            return "Authentication Bypass vulnerability detected: Access granted without proper authentication."
-        return None  # No vulnerability detected
-    except requests.RequestException as e:
-        raise SecurityCheckFailed(f"Failed authentication bypass check: {e}")
-
-
-
-def check_security_headers(url):
-    try:
-        response = requests.head(url)
-        security_headers = response.headers
-        if 'Content-Security-Policy' not in security_headers:
-            return "Content-Security-Policy header is missing"
-        return None
-    except requests.RequestException as e:
-        raise SecurityCheckFailed(f"Failed security headers check: {e}")
-
-
-def check_error_handling(url):
-    try:
-        response = requests.get(url + "/invalid_endpoint")
-        if "404" not in response.text:
-            return "Error handling might reveal sensitive information"
-        return None
-    except requests.RequestException as e:
-        raise SecurityCheckFailed(f"Failed error handling check: {e}")
-
-
-def print_failed_tests(failed_tests):
-    if failed_tests:
-        print("\nFailed Tests:")
-        for test in failed_tests:
-            print(f"- {test}")
-
-
-def main():
-    url = input("Enter the URL to scan: ").strip()
-
-
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url
-
+def run_security_checks(url, session):
     tests = [
-        ("Information Disclosure Check", lambda: check_information_disclosure(url)),
-        ("SQL Injection Check", lambda: check_sql_injection(url)),
-        ("XSS Vulnerability Check", lambda: check_xss_vulnerability(url)),
-        ("URL Redirection Check", lambda: check_url_redirection(url)),
-        ("Insecure Direct Object References Check", lambda: check_insecure_direct_object_references(url)),
-        ("Sensitive Data Exposure Check", lambda: check_sensitive_data_exposure(url)),
-        ("Authentication Bypass Check", lambda: check_authentication_bypass(url)),
-        ("Security Headers Check", lambda: check_security_headers(url)),
-        ("Error Handling Check", lambda: check_error_handling(url))
+        ("Information Disclosure Check", check_information_disclosure),
+        ("SQL Injection Check", check_sql_injection),
+        ("XSS Vulnerability Check", check_xss_vulnerability),
+        ("URL Redirection Check", check_url_redirection),
+        ("Insecure Direct Object References Check", check_insecure_direct_object_references),
+        ("Sensitive Data Exposure Check", check_sensitive_data_exposure),
+        ("Authentication Bypass Check", check_authentication_bypass),
+        ("Security Headers Check", check_security_headers),
+        ("Error Handling Check", check_error_handling),
+        ("Cross-Origin Resource Sharing Check", check_cross_origin_resource_sharing),
+        ("Directory Listing Check", check_directory_listing),
+        ("HTTP Methods Check", check_http_methods),
+        ("TLS Configuration Check", check_tls_configuration),
+        ("JWT Security Check", check_jwt_security),
+        ("Server Information Check", check_server_information),
+        ("Clickjacking Vulnerability Check", check_clickjacking_vulnerability),
+        ("Cookie Security Check", check_cookie_security),
+        ("CORS Policy Check", check_cors_policy),
+        ("Server-Side Template Injection Check", check_server_side_template_injection)
     ]
 
     failed_tests = []
 
     for test_name, check_function in tests:
         try:
-            perform_security_check(test_name, check_function)
+            perform_security_check(test_name, check_function, url, session)
+            # Introduce a delay between checks to avoid potential rate-limiting or server restrictions
+            time.sleep(2)
         except SecurityCheckFailed as e:
-            failed_tests.append(str(e))
+            failed_tests.append(e)
+        except Exception as e:
+            logger.warning(f"An unexpected error occurred during {test_name} check: {e}")
 
-    print_failed_tests(failed_tests)
+    return failed_tests
+
+
+def main():
+    try:
+        url = get_validated_url()
+
+        # Set up a session with headers to handle 403 Forbidden errors
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
+                          'Chrome/91.0.4472.124 Safari/537.3'
+        }
+        with requests.Session() as session:
+            session.headers.update(headers)
+            failed_tests = run_security_checks(url, session)
+
+        print_failed_tests(failed_tests)
+    except Exception as e:
+        logger.error(f"An unexpected error occurred: {e}")
+
 
 if __name__ == "__main__":
     main()
